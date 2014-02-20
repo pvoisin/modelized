@@ -1,100 +1,92 @@
-define(["Utility", "Aspect", "Observable", "Registry"], function(Utility, Aspect, Observable, Registry) {
-	function Model(definition) {
-		// Let's give models the `id` property by default:
-		definition = Model.normalize(Utility.merge({id: Number}, definition));
+var Utility = require("./Utility");
+var Aspect = require("./Aspect");
+var Observable = require("./Observable");
+var Registry = require("./Registry");
 
-		var constructor = this;
-		var prototype = constructor.prototype;
 
-		// Let's store the model definition at the prototype level:
-		getOwnScope(prototype, {
-			definition: definition,
-			nextInstanceId: 1
-		});
+function Model(definition) {
+	// Let's give models the `id` property by default:
+	definition = Model.normalize(Utility.merge({id: Number}, definition));
 
-		// Let's show model's defined properties but hide aspects' own scopes:
-		prototype.toJSON = function() {
-			var self = this, description = {};
+	var constructor = this;
+	var prototype = constructor.prototype;
 
-			Object.getOwnPropertyNames(self).forEach(function(property) {
-				if(Aspect.getOwnScope(self) != self[property] && !Utility.find(self.$Aspect.aspects, function(aspect) {
-					return aspect.getOwnScope(self) == self[property];
-				})) {
-					description[property] = self[property];
-				}
-			});
-
-			return description;
-		};
-
-//#if DEVELOPMENT
-		Observable.enhance(constructor);
-		Observable.initialize(constructor);
-
-		// Maybe that's too much and we'd rather leave that responsibility to designers:
-		Registry.enhance(constructor);
-		Registry.initialize(constructor);
-//#end
-
-		return constructor;
-	};
-
-	Aspect.define(Model, function initialize(values) {
-		var self = this, own = getOwnScope(self);
-
-		// Assumption: here, `self` is a final object:
-		var prototype = self.constructor.prototype;
-		var prototypeScope = getOwnScope(prototype);
-		var definition = prototypeScope.definition;
-
-		Utility.forOwn(own.definition, function(descriptor, property) {
-			var type = descriptor["type"],
-				value = descriptor["default"];
-
-			if(values && values.hasOwnProperty(property)) {
-				value = values[property];
-
-				if(type && !Model.validate(value, type)) {
-					throw new InvalidValueError(value, type);
-				}
-			}
-			else if(value === undefined) {
-				if(!!descriptor.required) {
-					throw new InvalidValueError(value, type);
-				}
-
-				if(property == "id") {
-// TODO: detect if "id" property has been overwritten:
-					value = prototypeScope.nextInstanceId++;
-				}
-				else if(type && ~Model.types.indexOf(type)) {
-					value = Model.getDefaultValue(type);
-				}
-			}
-
-			own[property] = value;
-
-			Object.defineProperty(self, property, {
-				get: function() {
-					return own[property];
-				},
-
-				set: function(value) {
-					if(type && !Model.validate(value, type)) {
-						throw new InvalidValueError(value, type);
-					}
-
-					own[property] = value;
-				}
-			});
-		});
-
-//#if DEVELOPMENT
-		self.constructor.trigger("creation", self);
-//#end
+	// Let's store the model definition at the prototype level:
+	getOwnScope(prototype, {
+		definition: definition,
+		nextInstanceId: 1
 	});
 
-	Model.define = function define() {
+//#if DEVELOPMENT
+	Observable.enhance(constructor);
+	Observable.initialize(constructor);
+
+//#end
+
+	return constructor;
+}
+
+
+Aspect.define(Model, function initialize(values) {
+	var self = this, own = getOwnScope(self);
+
+	// Assumption: here, `self` is a final object:
+	var prototype = self.constructor.prototype;
+	var prototypeScope = getOwnScope(prototype);
+	var definition = prototypeScope.definition;
+
+	Utility.forOwn(own.definition, function(descriptor, property) {
+		var type = descriptor["type"],
+			value = descriptor["default"],
+			validator = descriptor["validator"];
+
+		if(values && values.hasOwnProperty(property)) {
+			value = values[property];
+
+			if(type && !Model.validate(value, type)) {
+				throw new InvalidValueError(value, type);
+			}
+		}
+		else if(value === undefined) {
+			if(!!descriptor.required) {
+				throw new InvalidValueError(value, type);
+			}
+
+			if(property == "id") {
+// TODO: detect if "id" property has been overwritten:
+				value = prototypeScope.nextInstanceId++;
+			}
+			else if(type && ~Model.types.indexOf(type)) {
+				value = Model.getDefaultValue(type);
+			}
+		}
+
+		own[property] = value;
+
+		Object.defineProperty(self, property, {
+			enumerable: true,
+			get: function() {
+				return own[property];
+			},
+
+			set: function(value) {
+				if(type && !(Model.validate.call(self, value, type) && (!validator || validator.call(self, value)))) {
+					throw new InvalidValueError(value, type);
+				}
+
+				own[property] = value;
+			}
+		});
+	});
+
+//#if DEVELOPMENT
+	self.constructor.trigger("creation", self);
+//#end
+});
+
+
+Utility.merge(Model, {
+	define: function define() {
 		var constructor, definition;
 
 		if(Utility.isFunction(arguments[0]) && Utility.isObject(arguments[1])) {
@@ -121,14 +113,16 @@ define(["Utility", "Aspect", "Observable", "Registry"], function(Utility, Aspect
 		}
 
 		return Model.call(constructor, definition);
-	};
+	},
 
-	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	Model.normalize = function normalize(definition) {
+	/** Normalizes a model definition into its most explicit form. */
+	normalize: function normalize(definition) {
 		var result = {};
 
 		Utility.forOwn(definition, function(descriptor, property) {
-			var type, value, short = (!descriptor || descriptor.constructor !== Object);
+			var type, value;
+
+			var short = (!descriptor || descriptor.constructor !== Object);
 
 			if(short) {
 				type = Model.qualify(descriptor);
@@ -170,14 +164,14 @@ define(["Utility", "Aspect", "Observable", "Registry"], function(Utility, Aspect
 		});
 
 		return result;
-	};
+	},
 
 	/**
 	 * @param value Value to validate.
 	 * @param {Function} type Either a type or a validator function.
 	 * @param {Boolean} throwException Indicates whether some exception should be raised when `value` is not valid.
 	 */
-	Model.validate = function validate(value, type, throwException) {
+	validate: function validate(value, type, throwException) {
 		var valid = !type || (value instanceof type);
 
 		if(!valid) {
@@ -205,33 +199,48 @@ define(["Utility", "Aspect", "Observable", "Registry"], function(Utility, Aspect
 		}
 
 		return valid;
-	};
+	},
 
-	Model.types = [Object, Boolean, Number, String, Function, Date, RegExp, Array];
-	Model.genericTypes = [Boolean, Number, String];
+	/** Supported types. */
+	types: [Object, Boolean, Number, String, Function, Date, RegExp, Array],
 
-	Model.getDefaultValue = function getDefaultValue(type) {
+	/** Generic types (Boolean, Number, String). */
+	genericTypes: [Boolean, Number, String],
+
+	/**
+	 * Returns the default value for the given type. If `type` is a generic type then it returns JavaScript engine's default
+	 * value for such a type. If it is constructor then it returns a default instance (constructed with no parameters).
+	 */
+	getDefaultValue: function getDefaultValue(type) {
 		return ~Model.genericTypes.indexOf(type) ? type() : new type();
-	};
+	},
 
-	Model.qualify = function qualify(value, strict) {
+	/**
+	 * Determines what kind `value` is of. `null` or `undefined` qualify as mixed type, other objects as their constructor.
+	 * Examples: `"ABC"`: String, `123`: Number, `true`: Boolean, {key:value}`: Object, etc.
+	 * Finally, constructors don't qualify as functions but as... themselves; example: `Thing`: Thing.
+	 */
+	qualify: function qualify(value, strict) {
 		// `null` or `undefined` let the property of mixed type:
 		return !strict && Utility.isFunction(value) ? value : ((value != undefined) ? value.constructor : undefined);
-	};
-
-	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	function InvalidValueError(value, type) {
-		this.message = "Expected `" + type.name + "`: " + value;
-		var error = new Error(this.message);
-		this.stack = error.stack;
 	}
-
-	InvalidValueError.prototype = new Error();
-	InvalidValueError.prototype.name = InvalidValueError.name;
-	InvalidValueError.prototype.constructor = InvalidValueError;
-
-	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-	var getOwnScope = Model.getOwnScope;
-
-	return Model;
 });
+
+
+// Custom error used to formalize how value validation works.
+function InvalidValueError(value, type) {
+	this.message = "Expected `" + type.name + "`: " + value;
+	var error = new Error(this.message);
+	this.stack = error.stack;
+}
+
+InvalidValueError.prototype = new Error();
+InvalidValueError.prototype.name = InvalidValueError.name;
+InvalidValueError.prototype.constructor = InvalidValueError;
+
+
+// Default `getOwnScope` method defined by Aspect:
+var getOwnScope = Model.getOwnScope;
+
+
+module.exports = Model;

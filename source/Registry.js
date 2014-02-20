@@ -1,68 +1,56 @@
-define(["Aspect", "Observable"], function(Aspect, Observable) {
-	function Registry() {
-		this.register = function register(object) {
-			var self = this, own = getOwnScope(self);
-			if(!~own.objects.indexOf(self)) {
-				own.objects.push(object);
-			}
+var Aspect = require("./Aspect");
+var Observable = require("./Observable");
 
-			return self;
-		};
 
-		this.get = function(index) {
-			var self = this, own = getOwnScope(self);
-			return own.objects[index];
-		};
-
-		this.dispose = function dispose(object) {
-			var self = this, own = getOwnScope(self),
-				disposed = false,
-				index = own.objects.indexOf(object);
-
-			if(index > -1) {
-				own.objects.splice(index, 1);
-				disposed = true;
-			}
-
-			return disposed;
-		};
-
-		var getOwnScope = Registry.getOwnScope;
-	}
-
-	function getRegistry(object) {
-		var constructor = object.constructor,
-			registry;
-
-		if((constructor.$Aspect && ~constructor.$Aspect.aspects.indexOf(Registry))) {
-			registry = constructor;
+function Registry() {
+	this.register = function register(object) {
+		var self = this, own = getOwnScope(self);
+		if(!~own.objects.indexOf(self)) {
+			own.objects.push(object);
 		}
 
-		return registry;
-	}
-
-	Registry.dispose = function dispose(object) {
-		var registry = getRegistry(object);
-
-		return registry && registry.dispose(object);
+		return self;
 	};
 
-	Aspect.define(Registry, function initialize() {
+	this.get = function(index) {
 		var self = this, own = getOwnScope(self);
+		return own.objects[index];
+	};
 
-		own.objects = [];
+	this.dispose = function dispose(object) {
+		var self = this, own = getOwnScope(self),
+			disposed = false,
+			index = own.objects.indexOf(object);
 
-		// When dealing with constructors having the Observable aspect let's automatize new instances registration:
-		if(self.prototype.constructor == self) {
-			if(~self.$Aspect.aspects.indexOf(Observable)) {
-				self.attachObserver("creation", function(instance) {
-					own.objects.push(instance);
-				});
-			}
+		if(index > -1) {
+			own.objects.splice(index, 1);
+			disposed = true;
 		}
-	});
+
+		return disposed;
+	};
 
 	var getOwnScope = Registry.getOwnScope;
+}
 
-	return Registry;
+
+Aspect.define(Registry, function initialize() {
+	var self = this, own = getOwnScope(self);
+
+	own.objects = [];
+
+	// When dealing with constructors having the Observable aspect let's automatize new instances registration:
+	if(self.prototype.constructor == self) {
+		if(~Aspect.getOwnScope(self).aspects.indexOf(Observable)) {
+			self.attachObserver("creation", function(instance) {
+				own.objects.push(instance);
+			});
+		}
+	}
 });
+
+// Default `getOwnScope` method defined by Aspect:
+var getOwnScope = Registry.getOwnScope;
+
+
+module.exports = Registry;

@@ -25,7 +25,7 @@ function Person(values) {
 
 ## Aspect
 
-### Basics {#basics}
+### <a name="basics"></a>Basics
 
 Using `Aspect` is pretty simple: you just have to call `Aspect#initialize` within constructors, like:
 
