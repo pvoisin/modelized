@@ -20,7 +20,6 @@ function Model(definition) {
 //#if DEVELOPMENT
 	Observable.enhance(constructor);
 	Observable.initialize(constructor);
-
 //#end
 
 	return constructor;
@@ -44,12 +43,14 @@ Aspect.define(Model, function initialize(values) {
 			value = values[property];
 
 			if(type && !Model.validate(value, type)) {
-				throw new InvalidValueError(value, type);
+				throw new InvalidValueError(value, type, property);
 			}
 		}
 		else if(value === undefined) {
-			if(!!descriptor.required) {
-				throw new InvalidValueError(value, type);
+			var required = descriptor.required;
+
+			if(required && (!("either" in required) || values[required["either"]] === undefined)) {
+				throw new InvalidValueError(value, type, property);
 			}
 
 			if(property == "id") {
@@ -71,7 +72,7 @@ Aspect.define(Model, function initialize(values) {
 
 			set: function(value) {
 				if(type && !(Model.validate.call(self, value, type) && (!validator || validator.call(self, value)))) {
-					throw new InvalidValueError(value, type);
+					throw new InvalidValueError(value, type, property);
 				}
 
 				own[property] = value;
@@ -86,7 +87,7 @@ Aspect.define(Model, function initialize(values) {
 
 
 Utility.merge(Model, {
-	define: function define() {
+	define: function define(/* [constructor], definition, [initialize] */) {
 		var constructor, definition;
 
 		if(Utility.isFunction(arguments[0]) && Utility.isObject(arguments[1])) {
@@ -144,7 +145,7 @@ Utility.merge(Model, {
 					}
 
 					if(("default" in descriptor) && !Model.validate(value, type)) {
-						throw new InvalidValueError(value, type);
+						throw new InvalidValueError(value, type, property);
 					}
 				}
 				else if(value != undefined) {
@@ -228,8 +229,8 @@ Utility.merge(Model, {
 
 
 // Custom error used to formalize how value validation works.
-function InvalidValueError(value, type) {
-	this.message = "Expected `" + type.name + "`: " + value;
+function InvalidValueError(value, type, property) {
+	this.message = "Invalid value" + (property ? " for property \"" + property + "\"" : "") + "! Expected: `" + type.name + "`, provided: " + value;
 	var error = new Error(this.message);
 	this.stack = error.stack;
 }

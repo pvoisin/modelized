@@ -304,6 +304,46 @@ describe("Model", function() {
 				person.deathDate = "later";
 			}).to.throwError();
 		});
+
+		it("should validate required values properly", function() {
+			var apocalypse = new Date("2012-12-21");
+
+			function Person(values) {
+				Model.initialize(this, values);
+			}
+
+			Model.define(Person, {
+				firstName: {type: String, required: true},
+				lastName: "Mouse",
+				birthDate: Date
+			});
+
+			// First name is required:
+			expect(function() {
+				new Person();
+			}).to.throwError();
+
+			function Account(values) {
+				Model.initialize(this, values);
+			}
+
+			Model.define(Account, {
+				username: {type: String, required: {either: "email"}},
+				email: {type: String, required: {either: "username"}}
+			});
+
+			expect(function() {
+				new Account();
+			}).to.throwError();
+
+			expect(function() {
+				new Account({username: "john"});
+			}).not.to.throwError();
+
+			expect(function() {
+				new Account({email: "john.doe@example.com"});
+			}).not.to.throwError();
+		});
 	});
 
 	describe("observable", function() {
