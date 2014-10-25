@@ -1,16 +1,17 @@
 {
   "name": "modelized",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Having fun with models & aspects!",
   "keywords": [
     "model",
     "aspect",
-    "persistence"
+    "persistence",
+    "validation"
   ],
   "authors": [
     "Pierre Voisin <pierre.voisin@gmail.com>"
   ],
-  "repository": "ssh://git@github.com:pvoisin/modelized.git",
+  "repository": "https://github.com/pvoisin/modelized.git",
   "main": "source/Model.js",
   "devDependencies": {
     "grunt": "~0.4.2",

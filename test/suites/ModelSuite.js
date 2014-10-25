@@ -1,31 +1,144 @@
 var Utility = require("../../source/Utility");
 var Model = require("../../source/Model");
 var expect = require("expect.js");
-var sinon = require("sinon");
+var spy = require("sinon").spy;
 
 
 describe("Model", function() {
-	var candidates = [
-		undefined,			// 0
-		null,					// 1
-		false,				// 2
-		true,					// 3
-		Boolean(false),	// 4
-		Boolean(true),		// 5
-		NaN,					// 6
-		1,						// 7
-		Number(1),			// 8
-		"",					// 9
-		String(""),			// 10
-		{},					// 11
-		Object(),			// 12
-		[],					// 13
-		Array(),				// 14
-		new Date()			// 15
-	];
+	var samples = {
+		values: [
+			undefined,      // 0
+			null,           // 1
+			false,          // 2
+			true,           // 3
+			Boolean(false), // 4
+			Boolean(true),  // 5
+			NaN,            // 6
+			1,              // 7
+			Number(1),      // 8
+			"",             // 9
+			String(""),     // 10
+			{},             // 11
+			Object(),       // 12
+			[],             // 13
+			Array(),        // 14
+			new Date(),     // 15
+			function() {}   // 16
+		],
+
+		types: [
+			undefined, // 0
+			undefined, // 1
+			Boolean,   // 2
+			Boolean,   // 3
+			Boolean,   // 4
+			Boolean,   // 5
+			Number,    // 6
+			Number,    // 7
+			Number,    // 8
+			String,    // 9
+			String,    // 10
+			Object,    // 11
+			Object,    // 12
+			Array,     // 13
+			Array,     // 14
+			Date,      // 15
+			Function   // 16
+		]
+	};
+
+	describe("#qualify", function() {
+		it("should qualify objects properly", function() {
+			function Thing() {
+			}
+
+			var values = samples.values.concat(new Thing());
+			var types = samples.types.concat(Thing);
+
+			values.forEach(function(value, index) {
+				expect(Model.qualify(value)).to.be(types[index]);
+			});
+		});
+	});
+
+	describe("#normalize", function() {
+		it("should deal with short property descriptors properly", function() {
+			function Thing() {
+			}
+
+			var values = samples.values.concat(new Thing());
+			var types = samples.types.concat(Thing);
+
+			values.forEach(function(value, index) {
+				var result1 = Model.normalize({P: value});
+				// Let's verify equivalent explicit descriptors...
+				var result2 = Model.normalize({P: {default: value}});
+
+				// If `value` is a plain object then it is not a short descriptor.
+				if(!Utility.isObject(value, true)) {
+					// NaN cannot be compared to NaN with regular operators
+					if(Number.isNaN(value)) {
+						expect(Number.isNaN(result1["P"]["default"])).to.be(true);
+						expect(Number.isNaN(result2["P"]["default"])).to.be(true);
+						delete result1["P"]["default"];
+						delete result2["P"]["default"];
+						expect(result1).to.eql({P: {type: Number}});
+						expect(result1).to.eql(result2);
+					}
+					else if(value === undefined) {
+						expect(result1).to.eql({P: {type: undefined}});
+						expect(result2).to.eql({P: {default: undefined, type: undefined}});
+					}
+					else {
+						expect(result1).to.eql({P: {type: types[index], default: value}});
+						expect(result1).to.eql(result2);
+					}
+				}
+			});
+		});
+
+		it("should normalize definitions properly", function() {
+			function Thing() {}
+
+			expect(Model.normalize({})).to.eql({});
+// TODO:
+		});
+
+		it("should infer types from default property values", function() {
+			var definition = {};
+			var values = {};
+
+			Model.types.forEach(function(type, index) {
+				// Objects are used for explicit descriptors, anything else is considered a default value.
+				if(type !== Object) {
+					var property = String.fromCharCode(65 + index);
+					definition[property] = values[property] = Model.getDefaultValue(type);
+				}
+			});
+
+			var T = Model.define(definition);
+
+			var expectation = Model.types.reduce(function(expectation, type, index) {
+				if(type !== Object) {
+					var property = String.fromCharCode(65 + index);
+
+					var descriptor = {
+						type: type,
+						default: values[property]
+					};
+
+					expectation[property] = descriptor;
+				}
+
+				return expectation;
+			}, {});
+			expectation["id"] = {type: Number};
+			expect(Model.getOwnScope(T.prototype).definition).to.eql(expectation);
+		});
+	});
 
 	describe("#define", function() {
-		it("should only accept functions for second parameter", function() {
+		it("should only accept functions for last parameter", function() {
 			expect(function() {
 				Model.define({firstName: String, lastName: String}, []);
 			}).to.throwError();
@@ -37,9 +150,9 @@ describe("Model", function() {
 			}
 
 			Model.define(Thing, {contents: undefined});
-			candidates.forEach(function(candidate) {
+			samples.values.forEach(function(value) {
 				expect(function() {
-					new Thing({contents: candidate});
+					new Thing({contents: value});
 				}).not.to.throwError();
 			});
 		});
@@ -51,7 +164,8 @@ describe("Model", function() {
 
 			Model.define(Thing, {contents: undefined});
 			for(var index = 0; index < 10; index++) {
-				expect(new Thing().id).to.be(index + 1);
+				var t = new Thing();
+				expect(t.id).to.be(index + 1);
 			}
 		});
 
@@ -59,14 +173,17 @@ describe("Model", function() {
 			var Thing = Model.define({contents: undefined});
 			expect(new Thing({id: 123}).id).to.be(123);
 		});
-/* not sure if we want actually want that behavior as default...
-			it("should prevent `id` property to be duplicated for one model", function() {
-				var Thing = Model.define({contents: undefined});
-				var thing = new Thing();
-				expect(function() { new Thing({id: 0}); }).to.throwError();
-			});
+
+/* not sure if we actually want that behavior as default...
+				it("should prevent `id` property to be duplicated for one model", function() {
+					var Thing = Model.define({contents: undefined});
+					var thing = new Thing();
+					expect(function() { new Thing({id: 0}); }).to.throwError();
+				});
 //*/
-		it("should allow to specify default property value", function() {
+// TODO: validate that default values are validated and filtered if `validator` and `filter` are provided
+// TODO: ensure filtered value is validated by `validator`
+		it("should allow to specify basic property value", function() {
 			var now = new Date();
 			var apocalypse = new Date("2012-12-21");
 
@@ -79,7 +196,7 @@ describe("Model", function() {
 
 			var person = new Person();
 			expect(person instanceof Person).to.be(true);
-			expect(person.firstName).to.be("");
+			expect(person.firstName).to.be(undefined);
 			expect(person.lastName).to.be("Mouse");
 
 			person = new Person({firstName: "Mickey"});
@@ -87,7 +204,7 @@ describe("Model", function() {
 			expect(person.lastName).to.be("Mouse");
 
 			person = new Person({lastName: "Duck", birthDate: now});
-			expect(person.firstName).to.be("");
+			expect(person.firstName).to.be(undefined);
 			expect(person.lastName).to.be("Duck");
 			expect(person.birthDate).to.be(now);
 			expect(person.deathDate).to.be(apocalypse);
@@ -101,28 +218,24 @@ describe("Model", function() {
 		it("should accept more complex property definitions", function() {
 			var descriptors = {
 				valid: [
-					{type: null},
-					{type: null, default: "T"},
+					{type: undefined},
+					{type: undefined, default: "T"},
 					{type: Number},
 					{type: Number, default: 123},
-					{type: Function, default: function() {
-					}},
+					{type: Function, default: function() {}},
 					{type: Number, default: NaN}
 				],
 				invalid: [
 					{type: true},
-					{type: Number, default: function() {
-					}},
+					{type: Number, default: function() {}},
 					{type: "T"},
-					{type: "T", default: function() {
-					}},
+					{type: "T", default: function() {}},
 					{type: NaN, default: 123},
 					{type: Boolean, default: 999},
 					{type: Number, default: null},
-					{type: Object, default: null},
+//					{type: Object, default: null},
 					{type: Date, default: "T"},
-					{type: Date, default: function() {
-					}},
+					{type: Date, default: function() {}},
 					{type: Function, default: {}}
 				]
 			};
@@ -137,7 +250,7 @@ describe("Model", function() {
 				}).not.to.throwError();
 			});
 
-			descriptors.invalid.forEach(function(descriptor) {
+			descriptors.invalid.forEach(function(descriptor, index) {
 				expect(function() {
 					Model.define({thing: descriptor});
 				}).to.throwError();
@@ -146,8 +259,7 @@ describe("Model", function() {
 			expect(function() {
 				Model.define({
 					firstName: {type: Function},
-					lastName: {default: function() {
-					}},
+					lastName: {default: function() {}},
 					birthDate: {type: Date, writable: false},
 					deathDate: {default: apocalypse, private: true}
 				});
@@ -167,7 +279,7 @@ describe("Model", function() {
 
 			var person = new Person();
 			expect(person instanceof Person).to.be(true);
-			expect(person.firstName).to.be("");
+			expect(person.firstName).to.be(undefined);
 			expect(person.lastName).to.be("Mouse");
 
 			person = new Person({firstName: "Mickey"});
@@ -175,7 +287,7 @@ describe("Model", function() {
 			expect(person.lastName).to.be("Mouse");
 
 			person = new Person({lastName: "Duck", birthDate: now});
-			expect(person.firstName).to.be("");
+			expect(person.firstName).to.be();
 			expect(person.lastName).to.be("Duck");
 			expect(person.birthDate).to.be(now);
 			expect(person.deathDate).to.be(apocalypse);
@@ -191,7 +303,7 @@ describe("Model", function() {
 			var apocalypse = new Date("2012-12-21");
 
 			var parameters;
-			var initialize = sinon.spy(function(self, own) {
+			var initialize = spy(function(self, own) {
 				own.deathDate = apocalypse;
 				parameters = Array.prototype.slice.call(arguments);
 			});
@@ -212,33 +324,59 @@ describe("Model", function() {
 			]);
 			expect(person.deathDate).to.be(apocalypse);
 		});
+
+		it("should allow property filters", function() {
+			// Capitalize first letter:
+			var filter = spy(function(value) {
+				return !!value ? value[0].toUpperCase() + value.substring(1) : "";
+			});
+
+			function Person(values) {
+				Model.initialize(this, values);
+			}
+
+			Model.define(Person, {
+				firstName: {type: String, filter: filter},
+				lastName: {default: "Mouse"},
+				birthDate: {type: Date, writable: false}
+			});
+
+			var person = new Person({firstName: "mickey"});
+			expect(filter.calledWith("mickey")).to.be(true);
+			expect(person.firstName).to.be("Mickey");
+
+			expect(function() {
+				Model.define({contents: {type: String, filter: "???"}});
+			}).to.throwError();
+		});
 	});
 
 	describe("#validate", function() {
-		var testCases = {
-			"booleans": {type: Boolean, validCandidates: [2, 3, 4, 5]},
-			"numbers": {type: Number, validCandidates: [6, 7, 8]},
-			"strings": {type: String, validCandidates: [9, 10]},
-			"objects": {type: Object, validCandidates: [11, 12, 13, 14, 15]},
-			"arrays": {type: Array, validCandidates: [13, 14]},
-			"dates": {type: Date, validCandidates: [15]}
+		var expectations = {
+			"booleans": {type: Boolean, values: [2, 3, 4, 5]},
+			"numbers": {type: Number, values: [6, 7, 8]},
+			"strings": {type: String, values: [9, 10]},
+			"objects": {type: Object, values: [11, 12, 13, 14, 15, 16]},
+			"arrays": {type: Array, values: [13, 14]},
+			"dates": {type: Date, values: [15]},
+			"functions": {type: Function, values: [16]}
 		};
 
-		Utility.forOwn(testCases, function(description, testCase) {
-			it("should validate " + testCase, function() {
+		Utility.forOwn(expectations, function(expectation, category) {
+			it("should validate " + category, function() {
 				// Default values should be valid according to the `validate` function:
 				expect(function() {
-					Model.validate(Model.getDefaultValue(description.type), description.type);
+					Model.validate(Model.getDefaultValue(expectation.type), expectation.type);
 				}).not.to.throwError();
 
-				description.validCandidates.forEach(function(candidateIndex) {
-					var candidate = candidates[candidateIndex];
-					expect(Model.validate(candidate, description.type)).to.be(true);
+				expectation.values.forEach(function(index) {
+					var value = samples.values[index];
+					expect(Model.validate(value, expectation.type)).to.be(true);
 				});
 
-				candidates.forEach(function(candidate, index) {
-					if(!~description.validCandidates.indexOf(index)) {
-						expect(Model.validate(candidate, description.type)).to.be(false);
+				samples.values.forEach(function(value, index) {
+					if(!~expectation.values.indexOf(index)) {
+						expect(Model.validate(value, expectation.type)).to.be(false);
 					}
 				});
 			});
@@ -256,21 +394,25 @@ describe("Model", function() {
 				Model.initialize(this, values);
 			}
 
-			var spy = sinon.spy(validator);
-			Model.define(Thing, {contents: {type: String, validator: spy}});
+			validator = spy(validator);
+			Model.define(Thing, {contents: {type: String, validator: validator}});
 			var thing = new Thing();
 
 			expect(function() {
 				thing.contents = "!";
 			}).to.throwError();
-
-			expect(spy.calledWith("!")).to.be(true);
-			expect(spy.calledOn(thing)).to.be(true);
+			expect(validator.calledWith("!")).to.be(true);
+			expect(validator.calledOn(thing)).to.be(true);
 
 //			expect(Model.validate("http://???", validators["locator"])).to.be(false);
 //			expect(Model.validate("http://localhost", validators["locator"])).to.be(true);
+
+			expect(function() {
+				Model.define({contents: {type: String, validator: "???"}});
+			}).to.throwError();
 		});
 //*/
+
 		it("should validate values being set in properties", function() {
 			var apocalypse = new Date("2012-12-21");
 
@@ -321,7 +463,7 @@ describe("Model", function() {
 			// First name is required:
 			expect(function() {
 				new Person();
-			}).to.throwError();
+			}).to.throwError(/^Invalid/);
 
 			function Account(values) {
 				Model.initialize(this, values);
@@ -334,7 +476,7 @@ describe("Model", function() {
 
 			expect(function() {
 				new Account();
-			}).to.throwError();
+			}).to.throwError(/^Invalid/);
 
 			expect(function() {
 				new Account({username: "john"});
@@ -353,7 +495,7 @@ describe("Model", function() {
 			}
 
 			Model.define(Thing, {contents: undefined});
-			var observer = sinon.spy();
+			var observer = spy();
 			Thing.attachObserver("creation", observer);
 			var thing = new Thing();
 			expect(observer.calledWith(thing)).to.be(true);
