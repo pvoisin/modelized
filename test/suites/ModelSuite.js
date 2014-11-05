@@ -1,4 +1,4 @@
-var Utility = require("../../source/Utility");
+var $ = require("../../source/Utility");
 var Model = require("../../source/Model");
 var expect = require("expect.js");
 var spy = require("sinon").spy;
@@ -75,7 +75,7 @@ describe("Model", function() {
 				var result2 = Model.normalize({P: {default: value}});
 
 				// If `value` is a plain object then it is not a short descriptor.
-				if(!Utility.isObject(value, true)) {
+				if(!$.isObject(value, true)) {
 					// NaN cannot be compared to NaN with regular operators
 					if(Number.isNaN(value)) {
 						expect(Number.isNaN(result1["P"]["default"])).to.be(true);
@@ -335,6 +335,7 @@ describe("Model", function() {
 				Model.initialize(this, values);
 			}
 
+// TODO: validate "writable" property
 			Model.define(Person, {
 				firstName: {type: String, filter: filter},
 				lastName: {default: "Mouse"},
@@ -351,6 +352,44 @@ describe("Model", function() {
 		});
 	});
 
+	describe("#inherit", function() {
+		it("should let models inherit b combining their definitions", function() {
+			function Person(values) {
+				Model.initialize(this, values);
+			}
+
+			Model.define(Person, {
+				firstName: {type: String},
+				lastName: {default: "Mouse"},
+				birthDate: {type: Date}
+			});
+
+			function Actor(values) {
+				Person.call(this, values);
+			}
+
+			Model.define(Actor, {
+				sceneName: {type: String, required: true},
+				filmography: []
+			});
+
+			var definitions = {
+				"Person": $.clone(Model.getOwnScope(Person.prototype).definition, true),
+				"Actor": $.clone(Model.getOwnScope(Actor.prototype).definition, true)
+			};
+
+			Model.inherit(Actor, Person);
+
+			expect(Model.getOwnScope(Actor.prototype).definition).to.eql($.merge(
+				{id: {type: Number}},
+				$.clone(definitions["Person"]),
+				definitions["Actor"]
+			));
+
+			expect(Model.getOwnScope(Person.prototype).definition).to.eql(definitions["Person"]);
+		});
+	});
+
 	describe("#validate", function() {
 		var expectations = {
 			"booleans": {type: Boolean, values: [2, 3, 4, 5]},
@@ -362,7 +401,7 @@ describe("Model", function() {
 			"functions": {type: Function, values: [16]}
 		};
 
-		Utility.forOwn(expectations, function(expectation, category) {
+		$.forOwn(expectations, function(expectation, category) {
 			it("should validate " + category, function() {
 				// Default values should be valid according to the `validate` function:
 				expect(function() {

@@ -21,10 +21,26 @@ Aspect.define = function define(aspect, initialize) {
 		return aspect.apply(constructor, Array.prototype.slice(arguments, 1));
 	};
 
-	// Give the aspect the default `getOwnScope` function (see Aspect.prototype#getOwnScope):
-	aspect.getOwnScope = function getOwnScope() {
-		return Aspect.prototype.getOwnScope.apply(aspect, arguments);
-	};
+	Object.defineProperties(aspect, {
+		// Give the aspect a default `getOwnScope` function (see Aspect.prototype#getOwnScope):
+		getOwnScope: {
+			enumerable: false,
+			configurable: true,
+			writable: true,
+			value: function getOwnScope(defaultScope) {
+				return Aspect.prototype.getOwnScope.apply(aspect, arguments);
+			}
+		},
+		// Give the aspect a default `setOwnScope` function (see Aspect.prototype#setOwnScope):
+		setOwnScope: {
+			enumerable: false,
+			configurable: true,
+			writable: true,
+			value: function setOwnScope(scope) {
+				return Aspect.prototype.setOwnScope.apply(aspect, arguments);
+			}
+		}
+	});
 
 	// Wrap the provided `initialize` function to bring some more logic:
 	aspect.initialize = function(object) {
@@ -71,7 +87,7 @@ Aspect.initialize = function initialize(object) {
 	// Since `object` is being constructed we'll only consider its constructor's aspects.
 	// We're passing `false` as the second parameter to avoid the #Aspect scope to be created on the constructor if it
 	// doesn't exist yet.
-	var scope = Aspect.getOwnScope(Aspect.initialize.caller, true);
+	var scope = Aspect.getOwnScope(Aspect.initialize.caller);
 	if(scope) {
 		scope.aspects.forEach(function(aspect) {
 			results.push(aspect.initialize.apply(object, parameters));
@@ -81,7 +97,13 @@ Aspect.initialize = function initialize(object) {
 	return results;
 };
 
-// Returns the aspect-related own scope:
+// Returns the "own" scope relating to the aspect being defined.
+Aspect.prototype.setOwnScope = function setOwnScope(self, scope) {
+	// Here, `this` should be the aspect itself:
+	return self["#" + this.name] = scope;
+};
+
+// Returns the "own" scope relating to the aspect being defined.
 Aspect.prototype.getOwnScope = function getOwnScope(self, defaultScope) {
 	// Here, `this` should be the aspect itself:
 	var key = "#" + this.name;
@@ -111,7 +133,7 @@ Aspect.getOwnScope = function(self, existing) {
 // Checks if the given object has the provided aspect.
 Aspect.has = function(object, aspect) {
 	// Objects having aspects are supposed to have them into that scope:
-	var scope = Aspect.getOwnScope(object, true);
+	var scope = Aspect.getOwnScope(object);
 	return !!scope && !!~scope.aspects.indexOf(aspect);
 };
 

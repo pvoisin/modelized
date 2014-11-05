@@ -1,4 +1,4 @@
-var Utility = require("./Utility");
+var $ = require("./Utility");
 var Aspect = require("./Aspect");
 var Observable = require("./Observable");
 var Registry = require("./Registry");
@@ -6,7 +6,7 @@ var Registry = require("./Registry");
 
 function Model(definition) {
 	// Let's give models the `id` property by default:
-	definition = Model.normalize(Utility.merge({id: Number}, definition));
+	definition = Model.normalize($.merge({id: Number}, definition));
 
 	var constructor = this;
 	var prototype = constructor.prototype;
@@ -35,7 +35,7 @@ Aspect.define(Model, function initialize(values) {
 	var prototypeScope = getOwnScope(prototype);
 	var definition = prototypeScope.definition;
 
-	Utility.forOwn(own.definition, function(descriptor, property) {
+	$.forOwn(definition, function(descriptor, property) {
 		var type = descriptor["type"],
 			value = descriptor["default"],
 			validator = descriptor["validator"],
@@ -64,7 +64,7 @@ Aspect.define(Model, function initialize(values) {
 
 			set: function(value) {
 				// `null` can't fulfill any requirement...
-				if(required && value == undefined && (!Utility.isObject(required, true) || ("either" in required) && values[required["either"]] === undefined)) {
+				if(required && value == undefined && (!$.isObject(required, true) || ("either" in required) && values[required["either"]] === undefined)) {
 					throw new InvalidValueError(value, type, property);
 				}
 
@@ -85,15 +85,15 @@ Aspect.define(Model, function initialize(values) {
 });
 
 
-Utility.merge(Model, {
+$.merge(Model, {
 	define: function define(/* [constructor], definition, [initialize] */) {
 		var constructor, definition;
 
-		if(Utility.isFunction(arguments[0]) && Utility.isObject(arguments[1])) {
+		if($.isFunction(arguments[0]) && $.isObject(arguments[1])) {
 			constructor = arguments[0];
 			definition = arguments[1];
 		}
-		else if(Utility.isObject(arguments[0]) && (!arguments[1] || Utility.isFunction(arguments[1]))) {
+		else if($.isObject(arguments[0]) && (!arguments[1] || $.isFunction(arguments[1]))) {
 			definition = arguments[0];
 			var initialize = arguments[1];
 			constructor = function(values) {
@@ -119,7 +119,7 @@ Utility.merge(Model, {
 	normalize: function normalize(definition) {
 		var result = {};
 
-		Utility.forOwn(definition, function(descriptor, property) {
+		$.forOwn(definition, function(descriptor, property) {
 			var type, value;
 
 			// `descriptor` may be undefined, which would mean that it is a short descriptor for a mixed-type property.
@@ -144,7 +144,7 @@ Utility.merge(Model, {
 
 				// Valid types are base types + functions (potential constructors).
 				// Note: `undefined` or `null` mean mixed type.
-				if(type !== undefined && !~Model.types.indexOf(type) && !Utility.isFunction(type)) {
+				if(type !== undefined && !~Model.types.indexOf(type) && !$.isFunction(type)) {
 					throw new Error("Invalid type: " + type);
 				}
 
@@ -152,19 +152,19 @@ Utility.merge(Model, {
 				value = descriptor["default"];
 
 				var validator = descriptor["validator"];
-				if(!!validator && !Utility.isFunction(validator)) {
+				if(!!validator && !$.isFunction(validator)) {
 					throw new Error("Invalid validator: " + validator);
 				}
 
 				var filter = descriptor["filter"];
-				if(!!filter && !Utility.isFunction(filter)) {
+				if(!!filter && !$.isFunction(filter)) {
 					throw new Error("Invalid filter: " + filter);
 				}
 
 				// Infer type, when it is not specified, from default value.
 				if(!type && value !== undefined) {
 					// If default value is a function then `type` should be Function.
-					type = Utility.isFunction(value) ? Function : Model.qualify(value);
+					type = $.isFunction(value) ? Function : Model.qualify(value);
 				}
 			}
 
@@ -185,7 +185,7 @@ Utility.merge(Model, {
 
 // TODO: allow arrays of restricted types, like `[Person]`?
 
-			descriptor = Utility.merge({
+			descriptor = $.merge({
 /*
 				writable: true,
 				readable: true,
@@ -210,9 +210,9 @@ Utility.merge(Model, {
 // TODO: validate should validate "required"
 	validate: function validate(value, type) {
 // TODO: use `this` to validate the value forZ the related object
-		var descriptor = Utility.isObject(type, true) ? type : {type: type};
+		var descriptor = $.isObject(type, true) ? type : {type: type};
 		type = descriptor["type"];
-		if(type !== undefined && !Utility.isFunction(type)) {
+		if(type !== undefined && !$.isFunction(type)) {
 			throw new Error("Invalid type: " + type);
 		}
 
@@ -221,9 +221,9 @@ Utility.merge(Model, {
 		if(!valid) {
 			var validator;
 			if(~Model.types.indexOf(type)) {
-				validator = Utility["is" + type.name];
+				validator = $["is" + type.name];
 			}
-			else if(Utility.isFunction(type)) {
+			else if($.isFunction(type)) {
 				validator = type;
 			}
 			else {
@@ -257,13 +257,33 @@ Utility.merge(Model, {
 	 */
 	qualify: function qualify(value) {
 		return (value != undefined) ? value.constructor : undefined;
+	},
+
+	inherit: function inherit(model, parent) {
+		var definition = getOwnScope(model.prototype).definition;
+
+		model.parent = parent;
+		model.prototype = Object.create(parent.prototype, {
+			constructor: {
+				value: model,
+				enumerable: false,
+				writable: true,
+				configurable: true
+			}
+		});
+
+		// Here, parent & model's prototypes share the same "own" scope so we've got to isolate them from each others.
+		var scope = getOwnScope(model.prototype);
+		scope = setOwnScope(model.prototype, $.clone(scope, true));
+
+		scope.definition = $.merge(scope.definition, definition);
 	}
 });
 
 
 // Custom error used to formalize how value validation works.
 function InvalidValueError(value, type, property) {
-	this.message = "Invalid value" + (property ? " for property \"" + property + "\"" : "") + "! Expected: `" + type.name + "`, provided: (" + (typeof value) + ") " + value;
+	this.message = "Invalid value" + (property ? " for property \"" + property + "\"" : "") + "! Expected: `" + (type && type.name || type) + "`, provided: (" + (typeof value) + ") " + value;
 	var error = new Error(this.message);
 	this.stack = error.stack;
 }
@@ -273,7 +293,8 @@ InvalidValueError.prototype.name = InvalidValueError.name;
 InvalidValueError.prototype.constructor = InvalidValueError;
 
 
-// Default `getOwnScope` method defined by Aspect:
+// Default `setOwnScope` & `getOwnScope` methods defined by Aspect:
+var setOwnScope = Model.setOwnScope;
 var getOwnScope = Model.getOwnScope;
 
 
