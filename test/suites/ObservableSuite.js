@@ -1,6 +1,6 @@
 var expect = require("expect.js");
 var sinon = require("sinon");
-var Utility = require("../../source/Utility");
+var Utility = require("ytility");
 var Observable = require("../../source/Observable");
 
 describe("Observable", function() {

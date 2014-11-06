@@ -1,4 +1,4 @@
-var $ = require("../../source/Utility");
+var $ = require("ytility");
 var Model = require("../../source/Model");
 var expect = require("expect.js");
 var spy = require("sinon").spy;

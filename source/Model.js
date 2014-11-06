@@ -1,4 +1,4 @@
-var $ = require("./Utility");
+var $ = require("ytility");
 var Aspect = require("./Aspect");
 var Observable = require("./Observable");
 var Registry = require("./Registry");
