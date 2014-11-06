@@ -100,19 +100,20 @@ Aspect.initialize = function initialize(object) {
 // Returns the "own" scope relating to the aspect being defined.
 Aspect.prototype.setOwnScope = function setOwnScope(self, scope) {
 	// Here, `this` should be the aspect itself:
-	return self["#" + this.name] = scope;
+	Object.defineProperty(self, "#" + this.name, {
+		enumerable: false,
+		configurable: false,
+		writable: true,
+		value: scope
+	});
+
+	return scope;
 };
 
 // Returns the "own" scope relating to the aspect being defined.
 Aspect.prototype.getOwnScope = function getOwnScope(self, defaultScope) {
 	// Here, `this` should be the aspect itself:
-	var key = "#" + this.name;
-
-	if(!self[key]) {
-		self[key] = defaultScope || {};
-	}
-
-	return self[key];
+	return self["#" + this.name] || this.setOwnScope(self, defaultScope || {});;
 };
 
 // Returns Aspect class' own scope.
@@ -120,6 +121,8 @@ Aspect.getOwnScope = function(self, existing) {
 	if(!self.hasOwnProperty("#Aspect") && !existing) {
 		Object.defineProperty(self, "#Aspect", {
 			enumerable: false,
+			configurable: false,
+			writable: true,
 			value: {
 				aspects: [],
 				initialized: []
