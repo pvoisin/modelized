@@ -28,56 +28,8 @@ function Model(definition) {
 
 Aspect.define(Model, function initialize(values) {
 	var self = this, own = getOwnScope(self);
-	values = values || {};
 
-	// Assumption: here, `self` is a final object:
-	var prototype = self.constructor.prototype;
-	var prototypeScope = getOwnScope(prototype);
-	var definition = prototypeScope.definition;
-
-	$.forOwn(definition, function(descriptor, property) {
-		var type = descriptor["type"],
-			value = descriptor["default"],
-			validator = descriptor["validator"],
-			filter = descriptor["filter"],
-			required = descriptor.required;
-
-		if(values.hasOwnProperty(property)) {
-			value = values[property];
-
-			if(type && !Model.validate(value, type)) {
-				throw new InvalidValueError(value, type, property);
-			}
-		}
-		else if(value === undefined) {
-			if(property == "id") {
-// TODO: detect if "id" property has been overwritten:
-				value = prototypeScope.nextInstanceId++;
-			}
-		}
-
-		Object.defineProperty(self, property, {
-			enumerable: true,
-			get: function() {
-				return own[property];
-			},
-
-			set: function(value) {
-				// `null` can't fulfill any requirement...
-				if(required && value == undefined && (!$.isObject(required, true) || ("either" in required) && values[required["either"]] === undefined)) {
-					throw new InvalidValueError(value, type, property);
-				}
-
-				if(value !== undefined && !(Model.validate.call(self, value, type) && (!validator || validator.call(self, value)))) {
-					throw new InvalidValueError(value, type, property);
-				}
-
-				own[property] = filter ? filter(value) : value;
-			}
-		});
-
-		self[property] = value;
-	});
+	self.assign(values);
 
 //#if DEVELOPMENT
 	self.constructor.trigger("creation", self);
@@ -112,7 +64,12 @@ $.merge(Model, {
 			throw new Error("Invalid parameters!");
 		}
 
-		return Model.call(constructor, definition);
+		var model = Model.call(constructor, definition);
+		model.prototype.assign = function assign(value) {
+			return Model.assign.apply(this, arguments);
+		};
+
+		return model;
 	},
 
 	/** Normalizes a model definition into its most explicit form. */
@@ -176,7 +133,7 @@ $.merge(Model, {
 					value = filter(value);
 				}
 
-				if(validator && !validator(value) || !Model.validate(value, descriptor)) {
+				if(!Model.validate(value, descriptor)) {
 					throw new InvalidValueError(value, type, property);
 				}
 
@@ -200,6 +157,53 @@ $.merge(Model, {
 		return result;
 	},
 
+	assign: function assign(values) {
+		var self = this, own = getOwnScope(self);
+		values = values || {};
+
+		// Assumption: here, `self` is a final object:
+		var prototype = self.constructor.prototype;
+		var prototypeScope = getOwnScope(prototype);
+		var definition = prototypeScope.definition;
+
+		$.forOwn(definition, function(descriptor, property) {
+			var type = descriptor["type"],
+				value = descriptor["default"],
+				validator = descriptor["validator"],
+				filter = descriptor["filter"],
+				required = descriptor.required;
+
+			if(values.hasOwnProperty(property)) {
+				value = values[property];
+			}
+			else if(value === undefined) {
+				if(property == "id") {
+// TODO: detect if "id" property has been overwritten:
+					value = prototypeScope.nextInstanceId++;
+				}
+			}
+
+			Object.defineProperty(self, property, {
+				enumerable: true,
+				get: function() {
+					return own[property];
+				},
+
+				set: function(value) {
+					if(!(Model.validate.call(self, value, descriptor, values))) {
+						throw new InvalidValueError(value, type, property);
+					}
+
+					own[property] = filter ? filter(value) : value;
+				}
+			});
+
+			self[property] = value;
+		});
+
+		return self;
+	},
+
 	/**
 	 * @param value Value to validate.
 	 * @param {Function|Object} type Either a type or a property descriptor.
@@ -207,30 +211,37 @@ $.merge(Model, {
 	 *
 	 * @return true|false
 	 */
-// TODO: validate should validate "required"
-	validate: function validate(value, type) {
-// TODO: use `this` to validate the value forZ the related object
-		var descriptor = $.isObject(type, true) ? type : {type: type};
-		type = descriptor["type"];
+	validate: function validate(value, descriptor, values) {
+		descriptor = $.isObject(descriptor, true) ? descriptor : {type: descriptor};
+		var type = descriptor["type"];
 		if(type !== undefined && !$.isFunction(type)) {
 			throw new Error("Invalid type: " + type);
 		}
 
-		var valid = !type || (value instanceof type);
+		var required = descriptor["required"] || false;
+		// `null` can't fulfill any requirement...
+		var fulfilled = !required || value !== undefined
+			|| $.isObject(required, true) && $.isObject(values, true)
+				&& ("either" in required) && values[required["either"]] !== undefined;
 
-		if(!valid) {
-			var validator;
-			if(~Model.types.indexOf(type)) {
-				validator = $["is" + type.name];
-			}
-			else if($.isFunction(type)) {
-				validator = type;
-			}
-			else {
-				throw new Error("Invalid validator: " + type);
+		var valid = fulfilled && (!type || value instanceof type);
+
+		if(fulfilled && !valid) {
+			var validator = descriptor["validator"];
+			if(!validator) {
+				if(~Model.types.indexOf(type)) {
+					validator = $["is" + type.name];
+				}
+				else if($.isFunction(type)) {
+					validator = type;
+				}
+				else {
+					throw new Error("Invalid validator: " + type);
+				}
 			}
 
-			valid = validator(value);
+			// Custom validators are only called if `value` is defined.
+			valid = (value === undefined) || validator.call(this, value);
 		}
 
 		return valid;

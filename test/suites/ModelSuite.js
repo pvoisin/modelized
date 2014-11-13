@@ -253,6 +253,7 @@ describe("Model", function() {
 			descriptors.invalid.forEach(function(descriptor, index) {
 				expect(function() {
 					Model.define({thing: descriptor});
+console.log(descriptor);
 				}).to.throwError();
 			});
 
@@ -414,7 +415,8 @@ describe("Model", function() {
 				});
 
 				samples.values.forEach(function(value, index) {
-					if(!~expectation.values.indexOf(index)) {
+					// Values could be not defined if they're not required.
+					if((value !== undefined) && !~expectation.values.indexOf(index)) {
 						expect(Model.validate(value, expectation.type)).to.be(false);
 					}
 				});
