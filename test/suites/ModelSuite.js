@@ -253,7 +253,6 @@ describe("Model", function() {
 			descriptors.invalid.forEach(function(descriptor, index) {
 				expect(function() {
 					Model.define({thing: descriptor});
-console.log(descriptor);
 				}).to.throwError();
 			});
 
@@ -353,6 +352,46 @@ console.log(descriptor);
 		});
 	});
 
+	describe("#assign", function() {
+		it("should assign values properly", function() {
+			function Person(values) {
+				Model.initialize(this, values);
+			}
+
+			Model.define(Person, {firstName: String, lastName: String});
+			var person = new Person({unknown: "???"});
+
+			// #assign should only assign known properties (cf. definition)
+			expect(person.unknown).to.be(undefined);
+			person.assign({unknown: "thing"});
+			expect(person.unknown).to.be(undefined);
+			person.assign({unknown: 123});
+			expect(person.unknown).to.be(undefined);
+
+			person.unknown = "known";
+			expect(person.unknown).to.be("known");
+
+			function Account(values) {
+				Model.initialize(this, values);
+			}
+
+			Model.define(Account, {
+				username: {type: String, required: {either: "email"}},
+				email: {type: String, required: {either: "username"}}
+			});
+
+			var account = new Account({username: "john"});
+
+			expect(function() {
+				account.username = undefined;
+			}).to.throwError(/^Invalid/);
+
+			expect(function() {
+				account.assign({username: undefined, email: "john.doe@example.com"});
+			}).not.to.throwError();
+		});
+	});
+
 	describe("#inherit", function() {
 		it("should let models inherit b combining their definitions", function() {
 			function Person(values) {
@@ -422,7 +461,7 @@ console.log(descriptor);
 				});
 			});
 		});
-//*
+
 		it("should accept custom validators", function() {
 			var validator = function(value) {
 				return Model.validate(value, String) && (value.length >= 3);
@@ -452,7 +491,6 @@ console.log(descriptor);
 				Model.define({contents: {type: String, validator: "???"}});
 			}).to.throwError();
 		});
-//*/
 
 		it("should validate values being set in properties", function() {
 			var apocalypse = new Date("2012-12-21");
@@ -486,6 +524,10 @@ console.log(descriptor);
 			expect(function() {
 				person.deathDate = "later";
 			}).to.throwError();
+		});
+
+		it("should return `undefined` for \"either\" requirements missing additional values", function() {
+			expect(Model.validate(undefined, {type: String, required: {either: "email"}})).to.be(undefined);
 		});
 
 		it("should validate required values properly", function() {

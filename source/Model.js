@@ -28,6 +28,32 @@ function Model(definition) {
 
 Aspect.define(Model, function initialize(values) {
 	var self = this, own = getOwnScope(self);
+	values = values || {};
+
+	// Assumption: here, `self` is a final object:
+	var prototype = self.constructor.prototype;
+	var prototypeScope = getOwnScope(prototype);
+	var definition = prototypeScope.definition;
+
+	$.forOwn(definition, function(descriptor, property) {
+		var type = descriptor["type"],
+			filter = descriptor["filter"];
+
+		Object.defineProperty(self, property, {
+			enumerable: true,
+			get: function() {
+				return own[property];
+			},
+
+			set: function(value) {
+				if(!(Model.validate.call(self, value, descriptor, (Model.assign.arguments || [])[0]))) {
+					throw new InvalidValueError(value, type, property);
+				}
+
+				own[property] = filter ? filter(value) : value;
+			}
+		});
+	});
 
 	self.assign(values);
 
@@ -167,11 +193,7 @@ $.merge(Model, {
 		var definition = prototypeScope.definition;
 
 		$.forOwn(definition, function(descriptor, property) {
-			var type = descriptor["type"],
-				value = descriptor["default"],
-				validator = descriptor["validator"],
-				filter = descriptor["filter"],
-				required = descriptor.required;
+			var value = descriptor["default"];
 
 			if(values.hasOwnProperty(property)) {
 				value = values[property];
@@ -182,21 +204,6 @@ $.merge(Model, {
 					value = prototypeScope.nextInstanceId++;
 				}
 			}
-
-			Object.defineProperty(self, property, {
-				enumerable: true,
-				get: function() {
-					return own[property];
-				},
-
-				set: function(value) {
-					if(!(Model.validate.call(self, value, descriptor, values))) {
-						throw new InvalidValueError(value, type, property);
-					}
-
-					own[property] = filter ? filter(value) : value;
-				}
-			});
 
 			self[property] = value;
 		});
@@ -218,14 +225,18 @@ $.merge(Model, {
 			throw new Error("Invalid type: " + type);
 		}
 
+		var valid = !type || (value instanceof type);
+
 		var required = descriptor["required"] || false;
 		// `null` can't fulfill any requirement...
-		var fulfilled = !required || value !== undefined
-			|| $.isObject(required, true) && $.isObject(values, true)
-				&& ("either" in required) && values[required["either"]] !== undefined;
+		var fulfilled = !required || value !== undefined;
+		if(!fulfilled && $.isObject(required, true) && ("either" in required)) {
+			fulfilled = ($.isObject(values, true) && values[required["either"]] !== undefined) || undefined;
+			valid = undefined;
+		}
 
-		var valid = fulfilled && (!type || value instanceof type);
-
+		valid = valid && fulfilled;
+// TODO: may return undefined if `values` is not provided
 		if(fulfilled && !valid) {
 			var validator = descriptor["validator"];
 			if(!validator) {
