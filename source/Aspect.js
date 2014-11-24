@@ -27,7 +27,7 @@ Aspect.define = function define(aspect, initialize) {
 			enumerable: false,
 			configurable: true,
 			writable: true,
-			value: function getOwnScope(defaultScope) {
+			value: function getOwnScope() {
 				return Aspect.prototype.getOwnScope.apply(aspect, arguments);
 			}
 		},
@@ -55,16 +55,16 @@ Aspect.define = function define(aspect, initialize) {
 		var index = scope.aspects.indexOf(aspect);
 		if(index < 0 || !scope.initialized[index]) {
 			scope.aspects.push(aspect);
-			/*
+/*
 					var inherited = Aspect.getOwnScope(object.constructor.prototype).aspects;
-			console.log("INHERITED:", inherited);
+console.log("INHERITED:", inherited);
 					for(var index = inherited.length - 1; index > -1; index--) {
 						if(~declared.indexOf(inherited[index])) {
 							declared.unshift(inherited[index]);
 						}
 					}
-			console.log("COMBINED:", declared);
-			*/
+console.log("COMBINED:", declared);
+//*/
 			if(initialize) {
 				result = initialize.apply(object, Array.prototype.slice.call(arguments, 1));
 			}
@@ -113,11 +113,11 @@ Aspect.prototype.setOwnScope = function setOwnScope(self, scope) {
 // Returns the "own" scope relating to the aspect being defined.
 Aspect.prototype.getOwnScope = function getOwnScope(self, defaultScope) {
 	// Here, `this` should be the aspect itself:
-	return self["#" + this.name] || this.setOwnScope(self, defaultScope || {});;
+	return self.hasOwnProperty("#" + this.name) ? self["#" + this.name] : this.setOwnScope(self, defaultScope || {});
 };
 
 // Returns Aspect class' own scope.
-Aspect.getOwnScope = function(self, existing) {
+Aspect.getOwnScope = function getOwnScope(self, existing) {
 	if(!self.hasOwnProperty("#Aspect") && !existing) {
 		Object.defineProperty(self, "#Aspect", {
 			enumerable: false,

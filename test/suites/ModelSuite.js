@@ -153,7 +153,9 @@ describe("Model", function() {
 			samples.values.forEach(function(value) {
 				expect(function() {
 					new Thing({contents: value});
-				}).not.to.throwError();
+				}).not.to.throwError(function(error) {
+						console.error(error);
+					});
 			});
 		});
 
@@ -247,7 +249,9 @@ describe("Model", function() {
 			descriptors.valid.forEach(function(descriptor) {
 				expect(function() {
 					Model.define({thing: descriptor});
-				}).not.to.throwError();
+				}).not.to.throwError(function(error) {
+						console.error(error);
+					});
 			});
 
 			descriptors.invalid.forEach(function(descriptor, index) {
@@ -263,7 +267,9 @@ describe("Model", function() {
 					birthDate: {type: Date, writable: false},
 					deathDate: {default: apocalypse, private: true}
 				});
-			}).not.to.throwError();
+			}).not.to.throwError(function(error) {
+					console.error(error);
+				});
 
 			// - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -303,7 +309,8 @@ describe("Model", function() {
 			var apocalypse = new Date("2012-12-21");
 
 			var parameters;
-			var initialize = spy(function(self, own) {
+			var initialize = spy(function() {
+				var self = this, own = Model.getOwnScope(self);
 				own.deathDate = apocalypse;
 				parameters = Array.prototype.slice.call(arguments);
 			});
@@ -317,7 +324,7 @@ describe("Model", function() {
 
 			var person = new Person({firstName: "Mickey"}, "ABC", 123);
 			expect(initialize.called).to.be(true);
-			expect(parameters.slice(2)).to.eql([
+			expect(parameters).to.eql([
 				{firstName: "Mickey"},
 				"ABC",
 				123
@@ -361,12 +368,11 @@ describe("Model", function() {
 			Model.define(Person, {firstName: String, lastName: String});
 			var person = new Person({unknown: "???"});
 
-			// #assign should only assign known properties (cf. definition)
-			expect(person.unknown).to.be(undefined);
+			expect(person.unknown).to.be("???");
 			person.assign({unknown: "thing"});
-			expect(person.unknown).to.be(undefined);
+			expect(person.unknown).to.be("thing");
 			person.assign({unknown: 123});
-			expect(person.unknown).to.be(undefined);
+			expect(person.unknown).to.be(123);
 
 			person.unknown = "known";
 			expect(person.unknown).to.be("known");
@@ -388,7 +394,15 @@ describe("Model", function() {
 
 			expect(function() {
 				account.assign({username: undefined, email: "john.doe@example.com"});
-			}).not.to.throwError();
+			}).not.to.throwError(function(error) {
+					console.error(error);
+				});
+
+			expect(function() {
+				account.assign({thing: "john.doe"});
+			}).not.to.throwError(function(error) {
+					console.error(error);
+				});
 		});
 	});
 
@@ -446,7 +460,9 @@ describe("Model", function() {
 				// Default values should be valid according to the `validate` function:
 				expect(function() {
 					Model.validate(Model.getDefaultValue(expectation.type), expectation.type);
-				}).not.to.throwError();
+				}).not.to.throwError(function(error) {
+						console.error(error);
+					});
 
 				expectation.values.forEach(function(index) {
 					var value = samples.values[index];
@@ -514,13 +530,17 @@ describe("Model", function() {
 			var person = new Person({firstName: "Donald"});
 			expect(function() {
 				person.firstName = "Mickey";
-			}).not.to.throwError();
+			}).not.to.throwError(function(error) {
+					console.error(error);
+				});
 			expect(function() {
 				person.firstName = 1;
 			}).to.throwError();
 			expect(function() {
 				person.deathDate = apocalypse;
-			}).not.to.throwError();
+			}).not.to.throwError(function(error) {
+					console.error(error);
+				});
 			expect(function() {
 				person.deathDate = "later";
 			}).to.throwError();
@@ -563,11 +583,15 @@ describe("Model", function() {
 
 			expect(function() {
 				new Account({username: "john"});
-			}).not.to.throwError();
+			}).not.to.throwError(function(error) {
+					console.error(error);
+				});
 
 			expect(function() {
 				new Account({email: "john.doe@example.com"});
-			}).not.to.throwError();
+			}).not.to.throwError(function(error) {
+					console.error(error);
+				});
 		});
 	});
 

@@ -28,7 +28,7 @@ function Model(definition) {
 
 Aspect.define(Model, function initialize(values) {
 	var self = this, own = getOwnScope(self);
-	values = values || {};
+	values = $.clone(values) || {};
 
 	// Assumption: here, `self` is a final object:
 	var prototype = self.constructor.prototype;
@@ -55,6 +55,16 @@ Aspect.define(Model, function initialize(values) {
 		});
 	});
 
+	if(!values.hasOwnProperty("id")) {
+		values["id"] = prototypeScope.nextInstanceId++;
+	}
+
+	$.forOwn(definition, function(descriptor, property) {
+		if(!values.hasOwnProperty(property)) {
+			values[property] = descriptor["default"];
+		}
+	});
+
 	self.assign(values);
 
 //#if DEVELOPMENT
@@ -79,7 +89,7 @@ $.merge(Model, {
 
 				Model.initialize(self, values);
 
-				initialize && initialize.apply(self, [self, own].concat(Array.prototype.slice.call(arguments)));
+				initialize && initialize.apply(self, [].slice.call(arguments));
 			};
 
 			if(initialize && initialize.name) {
@@ -91,7 +101,7 @@ $.merge(Model, {
 		}
 
 		var model = Model.call(constructor, definition);
-		model.prototype.assign = function assign(value) {
+		model.prototype.assign = function assign(values) {
 			return Model.assign.apply(this, arguments);
 		};
 
@@ -186,25 +196,27 @@ $.merge(Model, {
 	assign: function assign(values) {
 		var self = this, own = getOwnScope(self);
 		values = values || {};
-
 		// Assumption: here, `self` is a final object:
 		var prototype = self.constructor.prototype;
 		var prototypeScope = getOwnScope(prototype);
 		var definition = prototypeScope.definition;
+		var remaining = $.clone(values);
 
 		$.forOwn(definition, function(descriptor, property) {
 			var value = descriptor["default"];
 
 			if(values.hasOwnProperty(property)) {
-				value = values[property];
+				self[property] = values[property];
 			}
-			else if(value === undefined) {
-				if(property == "id") {
+			else if(property === "id" && value === undefined) {
 // TODO: detect if "id" property has been overwritten:
-					value = prototypeScope.nextInstanceId++;
-				}
+				self[property] = prototypeScope.nextInstanceId++;
 			}
 
+			delete remaining[property];
+		});
+
+		$.forOwn(remaining, function(value, property) {
 			self[property] = value;
 		});
 
@@ -296,8 +308,7 @@ $.merge(Model, {
 
 		// Here, parent & model's prototypes share the same "own" scope so we've got to isolate them from each others.
 		var scope = getOwnScope(model.prototype);
-		scope = setOwnScope(model.prototype, $.clone(scope, true));
-
+		scope.definition = $.clone(getOwnScope(parent.prototype).definition);
 		scope.definition = $.merge(scope.definition, definition);
 	}
 });
